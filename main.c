@@ -1,99 +1,52 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <wchar.h>
 #include <webp/decode.h>
 #include <png.h>
 
-void dumpVersion() {
-    puts("v1.5  2024/03/28  ---Ray Liu");
-    puts("https://github.com/rayliu0712/FuckWebP");
+void enter_exit(int status) {
+    printf("\nPress Enter to exit . . . ");
+    char c;
+    scanf("%c", &c);
+    exit(status);
 }
 
-void terminate(const char *format, const wchar_t *wfilename, const char *cfilename) {
+void dump_version() {
+    puts("[ Version ] v1.5");
+    puts("[ Date    ] 2024/03/28 Thursday Sunny");
+    puts("[ Artist  ] Ray Liu");
+    puts("[ Source  ] https://github.com/rayliu0712/WebP");
+    enter_exit(0);
+}
+
+void terminate(const char *format, const void *filename) {
     printf("[ ERROR ] ");
-
-    if (wfilename)
-        printf(format, wfilename);
-    else
-        printf(format, cfilename);
-
-    printf("\n\n");
-
-    system("pause");
-    exit(1);
+    #ifdef _WIN32
+        printf(format, (wchar_t *) filename);
+    #elif defined(__linux__)
+        printf(format, (char *) filename);
+    #endif
+    puts("");
+    enter_exit(1);
 }
 
-void run(const wchar_t *wfilename, const char *cfilename) {
+void run(FILE *webpfile, FILE *pngfile) {
     png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     png_infop info = png_create_info_struct(png);
     if (setjmp(png_jmpbuf(png)))
-        terminate("The function \"png_create_write_struct()\" or \"png_create_info_struct()\" in libpng went wrong", NULL, NULL);
+        terminate("The function \"png_create_write_struct()\" or \"png_create_info_struct()\" in libpng went wrong", NULL);
 
-    size_t len;
-    FILE* webpFile, *pngFile;
+    fseek(webpfile, 0, SEEK_END);
+    size_t webpsize = ftell(webpfile);
+    uint8_t webpdata[webpsize];
     
-    #ifdef _WIN32
-        len = wcslen(wfilename);
-        const wchar_t *webpPath = wfilename;
-        wchar_t pngPath[len];
-
-        if (webpPath[len - 1] != 'p' ||
-            webpPath[len - 2] != 'b' ||
-            webpPath[len - 3] != 'e' ||
-            webpPath[len - 4] != 'w' ||
-            webpPath[len - 5] != '.')
-            terminate("Input file \"%ls\" is not WebP", webpPath, NULL);
-
-        wcsncpy(pngPath, webpPath, len - 1);
-        pngPath[len - 1] = '\0';
-        pngPath[len - 2] = 'g';
-        pngPath[len - 3] = 'n';
-        pngPath[len - 4] = 'p';
-
-        if (_wfopen(pngPath, L"rb"))
-            terminate("Output file \"%ls\" already exists", pngPath, NULL);
-
-        webpFile = _wfopen(webpPath, L"rb");
-        pngFile  = _wfopen(pngPath , L"wb");
-
-    #elif defined(__linux__)
-        len = strlen(cfilename);
-        const char *webpPath = cfilename;
-        char pngPath[len];
-
-        if (webpPath[len - 1] != 'p' ||
-            webpPath[len - 2] != 'b' ||
-            webpPath[len - 3] != 'e' ||
-            webpPath[len - 4] != 'w' ||
-            webpPath[len - 5] != '.')
-            terminate("Input file \"%s\" is not WebP", NULL, webpPath);
-
-        strncpy(pngPath, webpPath, len - 1);
-        pngPath[len - 1] = '\0';
-        pngPath[len - 2] = 'g';
-        pngPath[len - 3] = 'n';
-        pngPath[len - 4] = 'p';
-
-        if (fopen(pngPath, "rb"))
-            terminate("Output file \"%s\" already exists", NULL, pngPath);
-
-        webpFile = fopen(webpPath, "rb");
-        pngFile  = fopen(pngPath , "wb");
-
-    #endif
-
-    fseek(webpFile, 0, SEEK_END);
-    size_t webpSize = ftell(webpFile);
-    uint8_t webpData[webpSize];
-    
-    fseek(webpFile, 0, SEEK_SET);
-    fread(webpData, 1, webpSize, webpFile);
-    fclose(webpFile);
+    fseek(webpfile, 0, SEEK_SET);
+    fread(webpdata, 1, webpsize, webpfile);
+    fclose(webpfile);
 
     int height, width;
-    uint8_t *rgba = WebPDecodeRGBA(webpData, webpSize, &height, &width);
-    png_init_io(png, pngFile);
+    uint8_t *rgba = WebPDecodeRGBA(webpdata, webpsize, &height, &width);
+    png_init_io(png, pngfile);
     png_set_IHDR(
         png, info, width, height, 
         8,
@@ -116,7 +69,7 @@ void run(const wchar_t *wfilename, const char *cfilename) {
         png_write_row(png, row);
     }
     png_write_end(png, NULL);
-    fclose(pngFile);
+    fclose(pngfile);
 
     png_destroy_write_struct(&png, (png_infopp) NULL);
     png_free_data(png, info, PNG_FREE_ALL, -1);
@@ -129,13 +82,31 @@ void run(const wchar_t *wfilename, const char *cfilename) {
 #include <locale.h>
 int wmain(int argc, wchar_t *argv[]) {
     if (argc == 1)
-        terminate("No input file", NULL, NULL);
-
-    if (argv[1] == L"--version" || argv[1] == L"--help")
-        dumpVersion();
+        dump_version();
     else {
         setlocale(LC_ALL, "");
-        run(argv[1], NULL);
+
+        size_t len = wcslen(argv[1]);
+        wchar_t *webppath = argv[1];
+        wchar_t pngpath[len];
+
+        if (webppath[len - 1] != 'p' ||
+            webppath[len - 2] != 'b' ||
+            webppath[len - 3] != 'e' ||
+            webppath[len - 4] != 'w' ||
+            webppath[len - 5] != '.')
+            terminate("Input file \"%ls\" is not WebP", (void *) webppath);
+
+        wcsncpy(pngpath, webppath, len - 1);
+        pngpath[len - 1] = '\0';
+        pngpath[len - 2] = 'g';
+        pngpath[len - 3] = 'n';
+        pngpath[len - 4] = 'p';
+
+        if (_wfopen(pngpath, L"rb"))
+            terminate("Output file \"%ls\" already exists", (void *) pngpath);
+
+        run(_wfopen(webppath, L"rb"), _wfopen(pngpath , L"wb"));
     }
 
     return 0;
@@ -143,10 +114,31 @@ int wmain(int argc, wchar_t *argv[]) {
 
 #elif defined(__linux__)
 int main(int argc, char *argv[]) {
-    if (argc == 2 && (argv[1] == "--version" || argv[1] == "--help"))
-        dumpVersion();
-    else
-        run(NULL, argv[1]);
+    if (argc == 1)
+        dump_version();
+    else {
+        size_t len = strlen(argv[1]);
+        char *webppath = argv[1];
+        char pngpath[len];
+
+        if (webppath[len - 1] != 'p' ||
+            webppath[len - 2] != 'b' ||
+            webppath[len - 3] != 'e' ||
+            webppath[len - 4] != 'w' ||
+            webppath[len - 5] != '.')
+            terminate("Input file \"%s\" is not WebP", (void *) webppath);
+
+        strncpy(pngpath, webppath, len - 1);
+        pngpath[len - 1] = '\0';
+        pngpath[len - 2] = 'g';
+        pngpath[len - 3] = 'n';
+        pngpath[len - 4] = 'p';
+
+        if (fopen(pngpath, "rb"))
+            terminate("Output file \"%s\" already exists", (void *) pngpath);
+
+        run(fopen(webppath, "rb"), fopen(pngpath , "wb"));
+    }
 
     return 0;
 }
