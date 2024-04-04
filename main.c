@@ -4,16 +4,20 @@
 #include <webp/decode.h>
 #include <png.h>
 
-void enter_exit(int status) {
+void pause() {
     printf("\nPress Enter to exit . . . ");
     char c;
     scanf("%c", &c);
+}
+
+void enter_exit(int status) {
+    pause();
     exit(status);
 }
 
 void dump_version() {
-    puts("[ Version ] v1.5");
-    puts("[ Date    ] 2024/03/28 Thursday Sunny");
+    puts("[ Version ] v1.6");
+    puts("[ Date    ] 2024/04/04 Thursday Sunny");
     puts("[ Artist  ] Ray Liu");
     puts("[ Source  ] https://github.com/rayliu0712/WebP");
     enter_exit(0);
@@ -38,14 +42,14 @@ void run(FILE *webpfile, FILE *pngfile) {
 
     fseek(webpfile, 0, SEEK_END);
     size_t webpsize = ftell(webpfile);
-    uint8_t webpdata[webpsize];
-    
+    uint8_t *webpdata = (uint8_t *) malloc(webpsize);
+
     fseek(webpfile, 0, SEEK_SET);
     fread(webpdata, 1, webpsize, webpfile);
     fclose(webpfile);
 
     int height, width;
-    uint8_t *rgba = WebPDecodeRGBA(webpdata, webpsize, &height, &width);
+    uint8_t *rgba = WebPDecodeRGBA(webpdata, webpsize, &width, &height);
     png_init_io(png, pngfile);
     png_set_IHDR(
         png, info, width, height, 
@@ -74,6 +78,7 @@ void run(FILE *webpfile, FILE *pngfile) {
     png_destroy_write_struct(&png, (png_infopp) NULL);
     png_free_data(png, info, PNG_FREE_ALL, -1);
     WebPFree(rgba);
+    free(webpdata);
     free(row);
 }
 
